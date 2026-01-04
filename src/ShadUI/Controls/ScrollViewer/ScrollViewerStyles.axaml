@@ -1,9 +1,11 @@
 ﻿<Styles
     xmlns="https://github.com/avaloniaui"
     xmlns:shadui="clr-namespace:ShadUI"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ia="using:ShadUI.Utilities">
     <Style Selector="ScrollViewer">
         <Setter Property="IsScrollInertiaEnabled" Value="True" />
+        <Setter Property="shadui:ScrollableExt.IsSmoothScrollingEnabled" Value="True"/>
         <Setter Property="Template">
             <ControlTemplate>
                 <Panel>
@@ -70,6 +72,7 @@
             </ControlTemplate>
         </Setter>
     </Style>
+
     <Style Selector="ScrollViewer.Stack">
         <Setter Property="Background" Value="Transparent" />
         <Style Selector="^ /template/ Grid#BasicScroll">
