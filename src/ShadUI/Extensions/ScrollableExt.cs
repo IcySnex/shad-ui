@@ -15,7 +15,7 @@ internal static class ScrollableExt
 {
     static ScrollableExt()
     {
-        IsSmoothScrollingEnabledProperty.Changed.AddClassHandler<ScrollViewer>(OnIsSmoothScrollingEnabledChanged);
+        IsSmoothScrollEnabledProperty.Changed.AddClassHandler<ScrollViewer>(OnIsSmoothScrollEnabledChanged);
     }
 
 
@@ -44,28 +44,28 @@ internal static class ScrollableExt
 
 
     /// <summary>
-    /// Identifies the attached property that enables or disables smooth scrolling behavior for a ScrollViewer.
+    /// Identifies the attached property that enables or disables smooth scroll behavior for a ScrollViewer.
     /// </summary>
-    public static readonly AttachedProperty<bool> IsSmoothScrollingEnabledProperty =
-        AvaloniaProperty.RegisterAttached<ScrollViewer, bool>("IsSmoothScrollingEnabled", typeof(ScrollableExt), false);
+    public static readonly AttachedProperty<bool> IsSmoothScrollEnabledProperty =
+        AvaloniaProperty.RegisterAttached<ScrollViewer, bool>("IsSmoothScrollEnabled", typeof(ScrollableExt), false);
 
     /// <summary>
-    /// Sets the value indicating whether smooth scrolling is enabled for the specified ScrollViewer.
+    /// Sets the value indicating whether smooth scroll is enabled for the specified ScrollViewer.
     /// </summary>
-    /// <param name="element">The ScrollViewer for which to set the smooth scrolling behavior. Cannot be null.</param>
-    /// <param name="value">A value indicating whether smooth scrolling is enabled. to enable smooth.</param>
-    public static void SetIsSmoothScrollingEnabled(ScrollViewer element, bool value) =>
-        element.SetValue(IsSmoothScrollingEnabledProperty, value);
+    /// <param name="element">The ScrollViewer for which to set the smooth scroll behavior. Cannot be null.</param>
+    /// <param name="value">A value indicating whether smooth scroll is enabled. to enable smooth.</param>
+    public static void SetIsSmoothScrollEnabled(ScrollViewer element, bool value) =>
+        element.SetValue(IsSmoothScrollEnabledProperty, value);
 
     /// <summary>
-    /// Gets a value indicating whether smooth scrolling is enabled for the specified ScrollViewer.
+    /// Gets a value indicating whether smooth scroll is enabled for the specified ScrollViewer.
     /// </summary>
-    /// <param name="element">The ScrollViewer from which to retrieve the smooth scrolling setting. Cannot be null.</param>
-    /// <returns>true if smooth scrolling is enabled for the specified ScrollViewer otherwise, false.</returns>
-    public static bool GetIsSmoothScrollingEnabled(ScrollViewer element) =>
-        element.GetValue(IsSmoothScrollingEnabledProperty);
+    /// <param name="element">The ScrollViewer from which to retrieve the smooth scroll setting. Cannot be null.</param>
+    /// <returns>true if smooth scroll is enabled for the specified ScrollViewer otherwise, false.</returns>
+    public static bool GetIsSmoothScrollEnabled(ScrollViewer element) =>
+        element.GetValue(IsSmoothScrollEnabledProperty);
 
-    static void OnIsSmoothScrollingEnabledChanged(
+    static void OnIsSmoothScrollEnabledChanged(
         ScrollViewer scrollViewer,
         AvaloniaPropertyChangedEventArgs e)
     {
