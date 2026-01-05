@@ -16,13 +16,31 @@ namespace ShadUI.Utilities;
 /// </summary>
 public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 {
-    // The base size for a single scroll step: The higher, the faster.
-    const double BaseStepSize = 40; 
+    static readonly bool IsMacOs =  RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
     
-    // The SmoothingFactor factor: Lower = silkier, Higher = snappier.
-    const double SmoothingFactor = 50.0; 
+    static readonly StyledProperty<double> BaseStepSizeProperty =
+        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(BaseStepSize), IsMacOs ? 40 : 75);
+    /// <summary>
+    /// The base size for a single scroll step: Higher is faster.
+    /// </summary>
+    public double BaseStepSize
+    {
+        get => GetValue(BaseStepSizeProperty);
+        set => SetValue(BaseStepSizeProperty, value);
+    }
+    
+    static readonly StyledProperty<double> SmoothingFactorProperty =
+        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(SmoothingFactor), IsMacOs ? 50 : 12);
+    /// <summary>
+    /// The smoothing factor: Lower is silkier, Higher is snappier.
+    /// </summary>
+    public double SmoothingFactor
+    {
+        get => GetValue(SmoothingFactorProperty);
+        set => SetValue(SmoothingFactorProperty, value);
+    }
 
-    
+
     TopLevel? topLevel;
     
     double targetX, currentX;
