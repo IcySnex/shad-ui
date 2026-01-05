@@ -22,12 +22,12 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 
     TopLevel? topLevel;
 
-    double targetX = 0, currentX = 0;
-    double targetY = 0, currentY = 0;
+    double targetX, currentX;
+    double targetY, currentY;
 
-    bool isLoopRunning = false;
+    bool isLoopRunning;
     DateTime lastWheelEvent = DateTime.MinValue;
-    TimeSpan? lastFrameTime;
+    TimeSpan lastFrameTime = TimeSpan.FromSeconds(1.0 / 60.0); // 60 FPS as fallback for first frame
 
 
     /// <summary>
@@ -56,11 +56,14 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         object? sender,
         PointerWheelEventArgs e)
     {
-        if (e.Handled ||
-            AssociatedObject is null ||
-            TopLevel.GetTopLevel(AssociatedObject) is not TopLevel topLevel)
+        if (e.Handled || // already handled
+            AssociatedObject is null || TopLevel.GetTopLevel(AssociatedObject) is not TopLevel topLevel || // ??
+            Math.Abs(e.Delta.Y) < 1.0 && e.Delta.Y != 0 || Math.Abs(e.Delta.X) < 1.0 && e.Delta.X != 0) // input is high precision scroll (e.g. trackpad)
+        {
+            isLoopRunning = false;
             return;
-
+        }
+        
         this.topLevel = topLevel;
         Visual? source = e.Source as Visual;
 
@@ -75,28 +78,27 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         bool isShiftPressed = (e.KeyModifiers & KeyModifiers.Shift) != 0;
         while (source is not null && source != AssociatedObject)
         {
-            if (source is ScrollViewer inner && inner.IsVisible)
+            if (source is ScrollViewer { IsVisible: true } inner)
             {
                 bool innerHasHorizontal = inner.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
                 bool innerHasVertical = inner.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
-                bool innerIsHorizontalOnly = innerHasHorizontal && !innerHasVertical;
 
-                if (isShiftPressed || innerIsHorizontalOnly)
+                double tryingToMoveX = e.Delta.X + (isShiftPressed ? e.Delta.Y : 0);
+                double tryingToMoveY = isShiftPressed ? 0 : e.Delta.Y;
+                
+                if (innerHasHorizontal && !innerHasVertical && !isShiftPressed)
                 {
-                    bool canLeft = e.Delta.Y > 0 && inner.Offset.X > 0;
-                    bool canRight = e.Delta.Y < 0 && inner.Offset.X < (inner.Extent.Width - inner.Viewport.Width);
-
-                    if (canLeft || canRight)
-                        return;
+                    tryingToMoveX += tryingToMoveY;
+                    tryingToMoveY = 0;
                 }
-                else if (innerHasVertical)
-                {
-                    bool canUp = e.Delta.Y > 0 && inner.Offset.Y > 0;
-                    bool canDown = e.Delta.Y < 0 && inner.Offset.Y < (inner.Extent.Height - inner.Viewport.Height);
-
-                    if (canUp || canDown)
-                        return;
-                }
+                
+                bool canMoveX = (tryingToMoveX > 0 && inner.Offset.X > 0) || 
+                    (tryingToMoveX < 0 && inner.Offset.X < (inner.Extent.Width - inner.Viewport.Width));
+                bool canMoveY = (tryingToMoveY > 0 && inner.Offset.Y > 0) || 
+                    (tryingToMoveY < 0 && inner.Offset.Y < (inner.Extent.Height - inner.Viewport.Height));
+                
+                if (canMoveX || canMoveY)
+                    return; // Trap it! The inner child can handle this movement.
             }
 
             source = source.GetVisualParent();
@@ -148,7 +150,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             return;
 
         isLoopRunning = true;
-        lastFrameTime = null;
+        lastFrameTime = TimeSpan.FromSeconds(1.0 / 60.0);
 
         topLevel.RequestAnimationFrame(OnFrameTick);
     }
@@ -162,18 +164,18 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             return;
 
         // Calculate delta time
-        double dt = lastFrameTime.HasValue ? (time - lastFrameTime.Value).TotalSeconds : (1.0 / 60.0); // 60 FPS as fallback for first frame
+        double dt = (time - lastFrameTime).TotalSeconds;
         lastFrameTime = time;
         dt = Math.Min(dt, 0.1);
 
-        // Clamp target (doing it in frame tick and not before incase content resizes mid-scroll)
+        // Clamp target (doing it in frame tick and not before in case content resizes mid-scroll)
         double maxX = Math.Max(AssociatedObject.Extent.Width - AssociatedObject.Viewport.Width, 0);
         double maxY = Math.Max(AssociatedObject.Extent.Height - AssociatedObject.Viewport.Height, 0);
 
         targetX = Math.Clamp(targetX, 0, maxX);
         targetY = Math.Clamp(targetY, 0, maxY);
 
-        // Calulate new positions
+        // Calculate new positions
         double distY = targetY - currentY;
         double distX = targetX - currentX;
 
