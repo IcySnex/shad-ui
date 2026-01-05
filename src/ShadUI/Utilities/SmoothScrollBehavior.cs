@@ -15,7 +15,7 @@ namespace ShadUI.Utilities;
 /// </summary>
 public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 {
-    const double BaseStepSize = 75;
+    const double BaseStepSize = 40;
     const double SpeedMultiplier = 1.2;
     const double Friction = 0.000005;
 
@@ -119,19 +119,13 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         DateTime now = DateTime.UtcNow;
         double elapsed = (now - lastWheelEvent).TotalMilliseconds;
         lastWheelEvent = now;
+        
+        double accelartion = (elapsed < 80) ? Math.Min(1.0, 1.0 + (80 - elapsed) / 40.0) : 0.75;
+        
+        double stepX = e.Delta.X * BaseStepSize * accelartion;
+        double stepY = e.Delta.Y * BaseStepSize * accelartion;
 
-        // Instead of dampening, we boost if the user scrolls quickly
-        // If events are < 80ms apart, we apply a slight multiplier
-        double accel = (elapsed < 80) ? Math.Min(1.2, 1.0 + (80 - elapsed) / 40.0) : 1.0;
-
-        // Normalize deltas (e.Delta.Y is usually 1.0 or -1.0 on Windows)
-        double stepX = e.Delta.X * BaseStepSize * accel;
-        double stepY = e.Delta.Y * BaseStepSize * accel;
-
-        // 5. Direction Snap
-        // If the user suddenly reverses direction, snap current to target 
-        // to prevent the "rubbery" feeling of fighting old momentum.
-        if (Math.Sign(stepY) != Math.Sign(targetY - currentY) && Math.Abs(stepY) > 0.1)
+        if (Math.Sign(stepY) != Math.Sign(targetY - currentY) && Math.Abs(stepY) > 0.1) // Direction Snap
             currentY = targetY;
         if (Math.Sign(stepX) != Math.Sign(targetX - currentX) && Math.Abs(stepX) > 0.1)
             currentX = targetX;
@@ -172,7 +166,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         });
     }
 
-    const double Smoothing = 15.0; 
+    const double Smoothing = 10.0; 
 
     void OnFrameTick(TimeSpan time)
     {
