@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Xaml.Interactivity;
 using System;
+using System.Runtime.InteropServices;
 using Avalonia.Controls.Primitives;
 using Avalonia.Rendering;
 using Avalonia.VisualTree;
@@ -18,8 +19,8 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
     // The base size for a single scroll step: The higher, the faster.
     const double BaseStepSize = 40; 
     
-    // The smoothing factor: Lower = silkier, Higher = snappier.
-    const double Smoothing = 50.0; 
+    // The SmoothingFactor factor: Lower = silkier, Higher = snappier.
+    const double SmoothingFactor = 50.0; 
 
     
     TopLevel? topLevel;
@@ -73,7 +74,6 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         else if (Math.Abs(dx) > Math.Abs(dy))
             dy = 0;
 
-
         // Check if this event is actually for us
         Visual? source = e.Source as Visual;
         
@@ -121,20 +121,24 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             targetY = currentY;
         }
 
-        // Setting new target
+        // Updating target
         bool hasHorizontal = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
         bool hasVertical = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
         
-        if (isShiftPressed || (hasHorizontal && !hasVertical))
+        if (Math.Abs(dx) > 0) 
+        {
+            targetX -= dx * BaseStepSize;
+            targetY -= dy * BaseStepSize;
+        }
+        else if (isShiftPressed || (hasHorizontal && !hasVertical))
         {
             targetX -= dy * BaseStepSize;
         }
         else
         {
-            targetX -= dx * BaseStepSize;
             targetY -= dy * BaseStepSize;
         }
-
+        
         StartAnimationLoop();
         e.Handled = true;
     }
@@ -182,7 +186,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             return;
         }
 
-        double factor = 1.0 - Math.Exp(-Smoothing * dt);
+        double factor = 1.0 - Math.Exp(-SmoothingFactor * dt);
         currentX += dx * factor;
         currentY += dy * factor;
         
