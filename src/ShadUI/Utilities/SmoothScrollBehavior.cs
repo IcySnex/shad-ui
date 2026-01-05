@@ -27,7 +27,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 
     bool isLoopRunning;
     DateTime lastWheelEvent = DateTime.MinValue;
-    TimeSpan lastFrameTime = TimeSpan.FromSeconds(1.0 / 60.0); // 60 FPS as fallback for first frame
+    TimeSpan lastFrameTime = TimeSpan.Zero;
 
 
     /// <summary>
@@ -56,9 +56,10 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         object? sender,
         PointerWheelEventArgs e)
     {
-        if (e.Handled || // already handled
-            AssociatedObject is null || TopLevel.GetTopLevel(AssociatedObject) is not TopLevel topLevel || // ??
-            Math.Abs(e.Delta.Y) < 1.0 && e.Delta.Y != 0 || Math.Abs(e.Delta.X) < 1.0 && e.Delta.X != 0) // input is high precision scroll (e.g. trackpad)
+        double dx = e.Delta.X;
+        double dy = e.Delta.Y;
+        
+        if (e.Handled || AssociatedObject is null || TopLevel.GetTopLevel(AssociatedObject) is not TopLevel topLevel)
         {
             isLoopRunning = false;
             return;
@@ -78,7 +79,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         bool isShiftPressed = (e.KeyModifiers & KeyModifiers.Shift) != 0;
         while (source is not null && source != AssociatedObject)
         {
-            if (source is ScrollViewer { IsVisible: true } inner)
+            if (source is ScrollViewer inner && inner.IsVisible)
             {
                 bool innerHasHorizontal = inner.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
                 bool innerHasVertical = inner.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
@@ -128,15 +129,12 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 
         if (isShiftPressed || parentIsHorizontalOnly)
         {
-            targetX -= (e.Delta.Y * BaseStepSize * acceleration);
+            targetX -= dy * BaseStepSize * acceleration;
         }
         else
         {
-            targetY -= (e.Delta.Y * BaseStepSize * acceleration);
-
-            // Support for tilt-wheels or touchpads that send actual Delta.X ??? (idk i cant really test)
-            if (e.Delta.X != 0)
-                targetX -= (e.Delta.X * BaseStepSize * acceleration);
+            targetY -= dy * BaseStepSize * acceleration;
+            targetX -= dx * BaseStepSize * acceleration;
         }
 
         StartAnimationLoop();
@@ -150,9 +148,11 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             return;
 
         isLoopRunning = true;
-        lastFrameTime = TimeSpan.FromSeconds(1.0 / 60.0);
-
-        topLevel.RequestAnimationFrame(OnFrameTick);
+        topLevel.RequestAnimationFrame(time =>
+        {
+            lastFrameTime = time;
+            topLevel.RequestAnimationFrame(OnFrameTick);
+        });
     }
 
     void OnFrameTick(
