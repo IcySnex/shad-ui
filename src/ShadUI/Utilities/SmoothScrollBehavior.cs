@@ -19,7 +19,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
     static readonly bool IsMacOs =  RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
     
     static readonly StyledProperty<double> BaseStepSizeProperty =
-        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(BaseStepSize), IsMacOs ? 40 : 75);
+        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(BaseStepSize), IsMacOs ? 40 : 70);
     /// <summary>
     /// The base size for a single scroll step: Higher is faster.
     /// </summary>
@@ -30,7 +30,7 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
     }
     
     static readonly StyledProperty<double> SmoothingFactorProperty =
-        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(SmoothingFactor), IsMacOs ? 50 : 12);
+        AvaloniaProperty.Register<SmoothScrollBehavior, double>(nameof(SmoothingFactor), IsMacOs ? 50 : 20);
     /// <summary>
     /// The smoothing factor: Lower is silkier, Higher is snappier.
     /// </summary>
