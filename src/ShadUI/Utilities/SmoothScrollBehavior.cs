@@ -120,22 +120,25 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         double elapsed = (now - lastWheelEvent).TotalMilliseconds;
         lastWheelEvent = now;
 
+        double frequencyDampening = elapsed < 30 ? Math.Max(0.2, elapsed / 30.0) : 1.0;
         double acceleration = elapsed < 100 ? SpeedMultiplier : 1.0;
-
+        
+        double finalStepX = dx * BaseStepSize * acceleration * frequencyDampening;
+        double finalStepY = dy * BaseStepSize * acceleration * frequencyDampening;
+        
+        if (Math.Sign(finalStepY) != Math.Sign(targetY - currentY) && Math.Abs(dy) > 0.01)
+            currentY = targetY;
+        if (Math.Sign(finalStepX) != Math.Sign(targetX - currentX) && Math.Abs(dx) > 0.01)
+            currentX = targetX;
+        
         // Update targets
         bool parentHasHorizontal = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
         bool parentHasVertical = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
         bool parentIsHorizontalOnly = parentHasHorizontal && !parentHasVertical;
 
-        if (isShiftPressed || parentIsHorizontalOnly)
-        {
-            targetX -= dy * BaseStepSize * acceleration;
-        }
-        else
-        {
-            targetY -= dy * BaseStepSize * acceleration;
-            targetX -= dx * BaseStepSize * acceleration;
-        }
+        targetX -= finalStepX;
+        if (!isShiftPressed && !parentIsHorizontalOnly)
+            targetY -= finalStepY;
 
         StartAnimationLoop();
         e.Handled = true;
