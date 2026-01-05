@@ -1,12 +1,12 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Rendering;
-using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
 using System;
+using Avalonia.Controls.Primitives;
+using Avalonia.Rendering;
+using Avalonia.VisualTree;
 
 namespace ShadUI.Utilities;
 
@@ -15,28 +15,28 @@ namespace ShadUI.Utilities;
 /// </summary>
 public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 {
-    const double BaseStepSize = 40;
-    const double SpeedMultiplier = 1.2;
-    const double Friction = 0.000005;
+    // The base size for a single scroll step: The higher, the faster.
+    const double BaseStepSize = 40; 
+    
+    // The smoothing factor: Lower = silkier, Higher = snappier.
+    const double Smoothing = 50.0; 
 
-
+    
     TopLevel? topLevel;
-
+    
     double targetX, currentX;
     double targetY, currentY;
-
+    
     bool isLoopRunning;
-    DateTime lastWheelEvent = DateTime.MinValue;
     TimeSpan lastFrameTime = TimeSpan.Zero;
 
-
+    
     /// <summary>
     /// Invoked when the behavior is attached to its associated object.
     /// </summary>
     protected override void OnAttached()
     {
         base.OnAttached();
-
         AssociatedObject?.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged, RoutingStrategies.Tunnel);
     }
 
@@ -46,36 +46,45 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
     protected override void OnDetaching()
     {
         AssociatedObject?.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
+        
         isLoopRunning = false;
-
+        
         base.OnDetaching();
     }
 
-
+    
     void OnPointerWheelChanged(
         object? sender,
         PointerWheelEventArgs e)
     {
+        if (e.Handled || AssociatedObject is null)
+            return;
+        
+        topLevel ??= TopLevel.GetTopLevel(AssociatedObject);
+        if (topLevel is null)
+            return;
+        
+        // Prevent scroll direction leaks
         double dx = e.Delta.X;
         double dy = e.Delta.Y;
         
-        if (e.Handled || AssociatedObject is null || TopLevel.GetTopLevel(AssociatedObject) is not TopLevel topLevel)
-        {
-            isLoopRunning = false;
-            return;
-        }
-        
-        this.topLevel = topLevel;
-        Visual? source = e.Source as Visual;
+        if (Math.Abs(dy) > Math.Abs(dx))
+            dx = 0;
+        else if (Math.Abs(dx) > Math.Abs(dy))
+            dy = 0;
 
-        // Flyouts
+
+        // Check if this event is actually for us
+        Visual? source = e.Source as Visual;
+        
+        //  Flyouts
         IRenderRoot? sourceRoot = source?.GetVisualRoot();
         IRenderRoot? myBabyBooRoot = AssociatedObject.GetVisualRoot();
 
         if (sourceRoot != myBabyBooRoot)
             return; // this event is from a popup/flyout. TRAP IT!!! >:)
 
-        // Nested ScrollViewers
+        //  Chaining
         bool isShiftPressed = (e.KeyModifiers & KeyModifiers.Shift) != 0;
         while (source is not null && source != AssociatedObject)
         {
@@ -84,8 +93,8 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
                 bool innerHasHorizontal = inner.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
                 bool innerHasVertical = inner.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
 
-                double tryingToMoveX = e.Delta.X + (isShiftPressed ? e.Delta.Y : 0);
-                double tryingToMoveY = isShiftPressed ? 0 : e.Delta.Y;
+                double tryingToMoveX = dx + (isShiftPressed ? dy : 0);
+                double tryingToMoveY = isShiftPressed ? 0 : dy;
                 
                 if (innerHasHorizontal && !innerHasVertical && !isShiftPressed)
                 {
@@ -93,113 +102,92 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
                     tryingToMoveY = 0;
                 }
                 
-                bool canMoveX = (tryingToMoveX > 0 && inner.Offset.X > 0) || 
-                    (tryingToMoveX < 0 && inner.Offset.X < (inner.Extent.Width - inner.Viewport.Width));
-                bool canMoveY = (tryingToMoveY > 0 && inner.Offset.Y > 0) || 
-                    (tryingToMoveY < 0 && inner.Offset.Y < (inner.Extent.Height - inner.Viewport.Height));
+                bool canMoveX = (tryingToMoveX > 0 && inner.Offset.X > 0) || (tryingToMoveX < 0 && inner.Offset.X < (inner.Extent.Width - inner.Viewport.Width));
+                bool canMoveY = (tryingToMoveY > 0 && inner.Offset.Y > 0) || (tryingToMoveY < 0 && inner.Offset.Y < (inner.Extent.Height - inner.Viewport.Height));
                 
                 if (canMoveX || canMoveY)
-                    return; // Trap it! The inner child can handle this movement.
+                    return; // Trap it! The inner child can handle this movement itself
             }
 
             source = source.GetVisualParent();
         }
-
+        
         // Sync current position if we were idle
-        if (!isLoopRunning) 
+        if (!isLoopRunning)
         {
             currentX = AssociatedObject.Offset.X;
-            targetX = currentX;
-
             currentY = AssociatedObject.Offset.Y;
+            targetX = currentX;
             targetY = currentY;
         }
 
-        // Acceleration
-        DateTime now = DateTime.UtcNow;
-        double elapsed = (now - lastWheelEvent).TotalMilliseconds;
-        lastWheelEvent = now;
+        // Setting new target
+        bool hasHorizontal = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+        bool hasVertical = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
         
-        double accelartion = (elapsed < 80) ? Math.Min(1.0, 1.0 + (80 - elapsed) / 40.0) : 0.75;
-        
-        double stepX = e.Delta.X * BaseStepSize * accelartion;
-        double stepY = e.Delta.Y * BaseStepSize * accelartion;
-
-        if (Math.Sign(stepY) != Math.Sign(targetY - currentY) && Math.Abs(stepY) > 0.1) // Direction Snap
-            currentY = targetY;
-        if (Math.Sign(stepX) != Math.Sign(targetX - currentX) && Math.Abs(stepX) > 0.1)
-            currentX = targetX;
-
-        // 6. Update Targets
-        bool isShift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
-        bool canScrollHorizontally = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
-        bool canScrollVertically = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
-
-        // Logic for Shift-scroll or Horizontal-only viewers
-        if (isShift || (canScrollHorizontally && !canScrollVertically))
+        if (isShiftPressed || (hasHorizontal && !hasVertical))
         {
-            targetX -= (stepY + stepX); 
+            targetX -= dy * BaseStepSize;
         }
         else
         {
-            targetX -= stepX;
-            targetY -= stepY;
+            targetX -= dx * BaseStepSize;
+            targetY -= dy * BaseStepSize;
         }
 
         StartAnimationLoop();
         e.Handled = true;
     }
 
-
+    
     void StartAnimationLoop()
     {
         if (isLoopRunning || topLevel is null)
             return;
-
-        isLoopRunning = true;
-        lastFrameTime = TimeSpan.Zero;
         
+        isLoopRunning = true;
         topLevel.RequestAnimationFrame(time =>
         {
             lastFrameTime = time;
-            topLevel.RequestAnimationFrame(OnFrameTick);
+            OnFrameTick(time);
         });
     }
 
-    const double Smoothing = 10.0; 
-
-    void OnFrameTick(TimeSpan time)
+    void OnFrameTick(
+        TimeSpan time)
     {
-        if (!isLoopRunning || AssociatedObject is null)
+        if (!isLoopRunning || AssociatedObject is null || topLevel is null)
             return;
 
         double dt = (time - lastFrameTime).TotalSeconds;
         lastFrameTime = time;
-        dt = Math.Min(dt, 0.1);
 
         // Clamp target (doing it in frame tick and not before in case content resizes mid-scroll)
-        double maxX = Math.Max(AssociatedObject.Extent.Width - AssociatedObject.Viewport.Width, 0);
-        double maxY = Math.Max(AssociatedObject.Extent.Height - AssociatedObject.Viewport.Height, 0);
-
-        targetX = Math.Clamp(targetX, 0, maxX);
-        targetY = Math.Clamp(targetY, 0, maxY);
+        targetX = Math.Clamp(targetX,
+            min: 0,
+            max: Math.Max(AssociatedObject.Extent.Width - AssociatedObject.Viewport.Width, 0));
+        targetY = Math.Clamp(targetY,
+            min: 0,
+            max: Math.Max(AssociatedObject.Extent.Height - AssociatedObject.Viewport.Height, 0));
         
-        // Calculate new positions
+        // Calculate positions
         double dx = targetX - currentX;
         double dy = targetY - currentY;
         
-        if (Math.Abs(dx) < 0.01 && Math.Abs(dy) < 0.01) // Stop if we are close enough to the target
+        if (Math.Abs(dx) < 0.1 && Math.Abs(dy) < 0.1) // stop if too small
         {
             AssociatedObject.Offset = new(targetX, targetY);
             isLoopRunning = false;
+
             return;
         }
 
-        double lerpFactor = 1.0 - Math.Exp(-Smoothing * dt);
-        currentX += dx * lerpFactor;
-        currentY += dy * lerpFactor;
-
+        double factor = 1.0 - Math.Exp(-Smoothing * dt);
+        currentX += dx * factor;
+        currentY += dy * factor;
+        
+        // Update positions
         AssociatedObject.Offset = new(currentX, currentY);
-        topLevel?.RequestAnimationFrame(OnFrameTick);
+        topLevel.RequestAnimationFrame(OnFrameTick);
     }
 }
