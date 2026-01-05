@@ -120,25 +120,37 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         double elapsed = (now - lastWheelEvent).TotalMilliseconds;
         lastWheelEvent = now;
 
-        double frequencyDampening = elapsed < 30 ? Math.Max(0.2, elapsed / 30.0) : 1.0;
-        double acceleration = elapsed < 100 ? SpeedMultiplier : 1.0;
-        
-        double finalStepX = dx * BaseStepSize * acceleration * frequencyDampening;
-        double finalStepY = dy * BaseStepSize * acceleration * frequencyDampening;
-        
-        if (Math.Sign(finalStepY) != Math.Sign(targetY - currentY) && Math.Abs(dy) > 0.01)
-            currentY = targetY;
-        if (Math.Sign(finalStepX) != Math.Sign(targetX - currentX) && Math.Abs(dx) > 0.01)
-            currentX = targetX;
-        
-        // Update targets
-        bool parentHasHorizontal = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
-        bool parentHasVertical = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
-        bool parentIsHorizontalOnly = parentHasHorizontal && !parentHasVertical;
+        // Instead of dampening, we boost if the user scrolls quickly
+        // If events are < 80ms apart, we apply a slight multiplier
+        double accel = (elapsed < 80) ? Math.Min(1.2, 1.0 + (80 - elapsed) / 40.0) : 1.0;
 
-        targetX -= finalStepX;
-        if (!isShiftPressed && !parentIsHorizontalOnly)
-            targetY -= finalStepY;
+        // Normalize deltas (e.Delta.Y is usually 1.0 or -1.0 on Windows)
+        double stepX = e.Delta.X * BaseStepSize * accel;
+        double stepY = e.Delta.Y * BaseStepSize * accel;
+
+        // 5. Direction Snap
+        // If the user suddenly reverses direction, snap current to target 
+        // to prevent the "rubbery" feeling of fighting old momentum.
+        if (Math.Sign(stepY) != Math.Sign(targetY - currentY) && Math.Abs(stepY) > 0.1)
+            currentY = targetY;
+        if (Math.Sign(stepX) != Math.Sign(targetX - currentX) && Math.Abs(stepX) > 0.1)
+            currentX = targetX;
+
+        // 6. Update Targets
+        bool isShift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+        bool canScrollHorizontally = AssociatedObject.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+        bool canScrollVertically = AssociatedObject.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+
+        // Logic for Shift-scroll or Horizontal-only viewers
+        if (isShift || (canScrollHorizontally && !canScrollVertically))
+        {
+            targetX -= (stepY + stepX); 
+        }
+        else
+        {
+            targetX -= stepX;
+            targetY -= stepY;
+        }
 
         StartAnimationLoop();
         e.Handled = true;
@@ -151,6 +163,8 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
             return;
 
         isLoopRunning = true;
+        lastFrameTime = TimeSpan.Zero;
+        
         topLevel.RequestAnimationFrame(time =>
         {
             lastFrameTime = time;
@@ -158,15 +172,13 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
         });
     }
 
-    void OnFrameTick(
-        TimeSpan time)
+    const double Smoothing = 15.0; 
+
+    void OnFrameTick(TimeSpan time)
     {
-        if (!isLoopRunning ||
-            topLevel is null ||
-            AssociatedObject is null)
+        if (!isLoopRunning || AssociatedObject is null)
             return;
 
-        // Calculate delta time
         double dt = (time - lastFrameTime).TotalSeconds;
         lastFrameTime = time;
         dt = Math.Min(dt, 0.1);
@@ -177,29 +189,23 @@ public sealed class SmoothScrollBehavior : StyledElementBehavior<ScrollViewer>
 
         targetX = Math.Clamp(targetX, 0, maxX);
         targetY = Math.Clamp(targetY, 0, maxY);
-
+        
         // Calculate new positions
-        double distY = targetY - currentY;
-        double distX = targetX - currentX;
-
-        currentY += distY * (1.0 - Math.Pow(Friction, dt));
-        currentX += distX * (1.0 - Math.Pow(Friction, dt));
-
-        // Stop condition (Check if BOTH have arrived)
-        if (Math.Abs(distY) < 0.1 && Math.Abs(distX) < 0.1)
+        double dx = targetX - currentX;
+        double dy = targetY - currentY;
+        
+        if (Math.Abs(dx) < 0.01 && Math.Abs(dy) < 0.01) // Stop if we are close enough to the target
         {
-            currentY = targetY;
-            currentX = targetX;
-
-            AssociatedObject.Offset = new(currentX, currentY);
+            AssociatedObject.Offset = new(targetX, targetY);
             isLoopRunning = false;
             return;
         }
 
-        // Movy movy groovy groovy!
-        AssociatedObject.Offset = new(currentX, currentY);
+        double lerpFactor = 1.0 - Math.Exp(-Smoothing * dt);
+        currentX += dx * lerpFactor;
+        currentY += dy * lerpFactor;
 
-        // Queue next frame
-        topLevel.RequestAnimationFrame(OnFrameTick);
+        AssociatedObject.Offset = new(currentX, currentY);
+        topLevel?.RequestAnimationFrame(OnFrameTick);
     }
 }
